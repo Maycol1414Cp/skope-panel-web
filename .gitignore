@@ -30,11 +30,19 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# env files — nunca commitear claves reales (ver AGENTS.md > Variables de entorno)
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
+
+# editors
+.idea/
+
+# logs
+*.log
 
 example
 

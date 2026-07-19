@@ -8,7 +8,11 @@
     "scheme": "skope",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.anonymous.skope",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +21,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.skope"
     },
     "web": {
       "output": "static",
@@ -32,11 +37,39 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      "expo-status-bar",
+      "@maplibre/maplibre-react-native",
+      "expo-font",
+      "@react-native-vector-icons/material-icons",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Skope usa tu ubicación para mostrarte reportes cercanos y validar la confiabilidad de los que hagas."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Skope necesita acceso a tus fotos para adjuntar evidencia a un reporte."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#004AC6"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ece8ec72-0750-47ea-9685-db796cf9a743"
+      }
     }
   }
 }
