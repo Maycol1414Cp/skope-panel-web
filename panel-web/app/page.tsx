@@ -1,190 +1,195 @@
 'use client';
-import { createClient } from '@supabase/supabase-js';
-import 'leaflet/dist/leaflet.css';
+
+import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 
-// Conexión a Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ==========================================
+// 1. CLASIFICACIÓN DE MACRODISTRITOS Y COORDENADAS
+// ==========================================
+function obtenerMacrodistrito(item: any): string {
+  if (item.macrodistrito) return item.macrodistrito.toLowerCase();
 
-export default function DashboardSkopeDark() {
-  const [reportes, setReportes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const texto = `${item.titulo || ''} ${item.descripcion || ''}`.toLowerCase();
+  
+  if (texto.includes('prado') || texto.includes('centro') || texto.includes('sopocachi') || texto.includes('miraflores')) {
+    return 'centro';
+  }
+  if (texto.includes('cotahuma') || texto.includes('tembladerani')) {
+    return 'cotahuma';
+  }
+  if (texto.includes('max paredes') || texto.includes('buenos aires') || texto.includes('cementerio')) {
+    return 'max_paredes';
+  }
+  if (texto.includes('periferica') || texto.includes('achachicala')) {
+    return 'periferica';
+  }
+  if (texto.includes('san antonio') || texto.includes('pampahasi') || texto.includes('villa fátima')) {
+    return 'san_antonio';
+  }
+  if (texto.includes('sur') || texto.includes('calacoto') || texto.includes('irpavi') || texto.includes('achumani')) {
+    return 'sur';
+  }
 
-  // Cargar reportes de la base de datos de Oscar/Adhemar
-  const cargarReportes = async () => {
-    const { data, error } = await supabase
-      .from('reportes')
-      .select('*')
-      .order('created_at', { ascending: false });
+  return 'centro';
+}
 
-    if (!error && data) setReportes(data);
-    setLoading(false);
-  };
+// Coordenadas y límites (bbox) para centrar el mapa de OpenStreetMap según el macrodistrito
+function obtenerCoordenadasZona(zona: string) {
+  switch (zona) {
+    case 'centro':
+      return { lat: -16.5000, lon: -68.1315, bbox: '-68.15,-16.52,-68.11,-16.48' };
+    case 'cotahuma':
+      return { lat: -16.5100, lon: -68.1500, bbox: '-68.17,-16.53,-68.13,-16.49' };
+    case 'max_paredes':
+      return { lat: -16.4800, lon: -68.1600, bbox: '-68.18,-16.50,-68.14,-16.46' };
+    case 'periferica':
+      return { lat: -16.4700, lon: -68.1300, bbox: '-68.15,-16.49,-68.11,-16.45' };
+    case 'san_antonio':
+      return { lat: -16.5000, lon: -68.1100, bbox: '-68.13,-16.52,-68.09,-16.48' };
+    case 'sur':
+      return { lat: -16.5400, lon: -68.0800, bbox: '-68.10,-16.57,-68.06,-16.51' };
+    default: // 'todos'
+      return { lat: -16.5000, lon: -68.1315, bbox: '-68.16,-16.53,-68.10,-16.48' };
+  }
+}
 
-  useEffect(() => {
-    cargarReportes();
-  }, []);
-
-  // Cambiar estado del reporte desde el panel
-  const cambiarEstado = async (id, nuevoEstado) => {
-    const { error } = await supabase
-      .from('reportes')
-      .update({ estado: nuevoEstado })
-      .eq('id', id);
-
-    if (!error) cargarReportes();
-  };
-
-  // Contadores
-  const total = reportes.length;
-  const verificados = reportes.filter((r) => r.estado === 'verificado').length;
-  const pendientes = reportes.filter((r) => r.estado === 'pendiente').length;
+// ==========================================
+// 2. ENCABEZADO Y FILTROS
+// ==========================================
+function DashboardHeader({ reportes, zonaSeleccionada, setZonaSeleccionada }: any) {
+  const totalReportes = reportes.length;
+  const verificados = reportes.filter((r: any) => r.estado === 'verificado').length;
 
   return (
-    <div className="min-h-screen bg-[#090D16] text-[#F1F5F9] font-sans flex flex-col">
-      
-      {/* 1. HEADER CON PALETA SKOPE (#2563EB) */}
-      <header className="bg-[#0F172A] border-b border-[#1E293B] px-6 py-3.5 flex justify-between items-center sticky top-0 z-50 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#2563EB] flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
-            S
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              Skope <span className="text-[11px] font-normal text-[#757881] bg-[#1E293B] px-2 py-0.5 rounded-full border border-slate-700">La Paz — GAMLP</span>
-            </h1>
-            <p className="text-xs text-[#757881]">Centro de Control de Reportes Vecinales</p>
-          </div>
+    <div className="p-4 space-y-4 bg-slate-900 text-white rounded-xl mb-6 border border-slate-800 shadow-xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-3 border-b border-slate-800">
+        <div>
+          <h1 className="text-xl font-bold text-sky-400 flex items-center gap-2">
+            📊 Monitoreo Geográfico - La Paz
+          </h1>
+          <p className="text-xs text-slate-400">Sistema SKOPE de alertas urbanas en tiempo real</p>
         </div>
 
-        {/* MÉTRICAS CON COLORES LUMINOUS CIVIC (#2563EB, #10B981, #F59E0B) */}
-        <div className="flex gap-2">
-          <div className="bg-[#1E293B]/80 border border-slate-700/60 px-3.5 py-1.5 rounded-xl text-center">
-            <span className="block text-[10px] text-[#757881] uppercase font-semibold">Total</span>
-            <span className="text-sm font-bold text-[#2563EB]">{total}</span>
-          </div>
-          <div className="bg-[#10B981]/10 border border-[#10B981]/30 px-3.5 py-1.5 rounded-xl text-center">
-            <span className="block text-[10px] text-[#10B981] uppercase font-semibold">Verificados</span>
-            <span className="text-sm font-bold text-[#10B981]">{verificados}</span>
-          </div>
-          <div className="bg-[#F59E0B]/10 border border-[#F59E0B]/30 px-3.5 py-1.5 rounded-xl text-center">
-            <span className="block text-[10px] text-[#F59E0B] uppercase font-semibold">Pendientes</span>
-            <span className="text-sm font-bold text-[#F59E0B]">{pendientes}</span>
-          </div>
-        </div>
-      </header>
+        <select
+          value={zonaSeleccionada}
+          onChange={(e) => setZonaSeleccionada(e.target.value)}
+          className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg p-2.5 focus:ring-2 focus:ring-sky-500 outline-none cursor-pointer"
+        >
+          <option value="todos">📍 Todos los Macrodistritos</option>
+          <option value="centro">Macrodistrito Centro (El Prado / Sopocachi / Miraflores)</option>
+          <option value="cotahuma">Macrodistrito Cotahuma</option>
+          <option value="max_paredes">Macrodistrito Max Paredes</option>
+          <option value="periferica">Macrodistrito Periférica</option>
+          <option value="san_antonio">Macrodistrito San Antonio</option>
+          <option value="sur">Macrodistrito Zona Sur</option>
+        </select>
+      </div>
 
-      {/* 2. ESTRUCTURA DEL DASHBOARD EN MODO OSCURO */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700/50">
+          <p className="text-xs text-slate-400">Total Incidentes</p>
+          <p className="text-2xl font-black text-white">{totalReportes}</p>
+        </div>
+        <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700/50">
+          <p className="text-xs text-slate-400">Verificados</p>
+          <p className="text-2xl font-black text-emerald-400">{verificados}</p>
+        </div>
+        <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700/50">
+          <p className="text-xs text-slate-400">Filtro Activo</p>
+          <p className="text-sm font-bold text-amber-400 uppercase mt-1">{zonaSeleccionada}</p>
+        </div>
+        <div className="bg-slate-800/70 p-3 rounded-lg border border-slate-700/50">
+          <p className="text-xs text-slate-400">Estado Conexión</p>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 mt-1">
+            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span> Supabase En Vivo
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 3. PÁGINA PRINCIPAL
+// ==========================================
+export default function Home() {
+  const [reportes, setReportes] = useState<any[]>([]);
+  const [zonaSeleccionada, setZonaSeleccionada] = useState('todos');
+
+  useEffect(() => {
+    async function obtenerReportes() {
+      const { data } = await supabase.from('reportes').select('*');
+      if (data) setReportes(data);
+    }
+    obtenerReportes();
+  }, []);
+
+  // Filtrado de reportes según la zona elegida
+  const reportesFiltrados = reportes.filter((item) => {
+    if (zonaSeleccionada === 'todos') return true;
+    return obtenerMacrodistrito(item) === zonaSeleccionada;
+  });
+
+  // Obtener coordenadas dinámicas según el selector
+  const coordsActuales = obtenerCoordenadasZona(zonaSeleccionada);
+
+  return (
+    <main className="min-h-screen bg-slate-950 p-4 md:p-6 text-slate-100">
+      <DashboardHeader 
+        reportes={reportesFiltrados} 
+        zonaSeleccionada={zonaSeleccionada} 
+        setZonaSeleccionada={setZonaSeleccionada} 
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* PANEL DEL MAPA (2/3 DE PANTALLA) */}
-        <section className="lg:col-span-8 bg-[#0F172A] rounded-2xl border border-[#1E293B] overflow-hidden shadow-2xl flex flex-col relative min-h-[480px]">
-          <div className="bg-[#0F172A] px-4 py-3 border-b border-[#1E293B] flex justify-between items-center z-10">
-            <span className="text-xs font-medium text-slate-300 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] animate-ping"></span>
-              Monitoreo Territorial en Tiempo Real
-            </span>
-            <span className="text-[11px] text-[#757881] font-mono">OpenStreetMap Layer</span>
+        {/* MAPA DINÁMICO */}
+        <div className="lg:col-span-2 bg-slate-900 rounded-xl p-4 border border-slate-800 flex flex-col">
+          <h3 className="text-md font-semibold text-slate-300 mb-3 flex items-center gap-2">
+            🗺️ Mapa de Monitoreo Urbano - Zona: <span className="uppercase text-sky-400">{zonaSeleccionada}</span>
+          </h3>
+          
+          <div className="w-full h-[500px] bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center relative">
+            <iframe
+              key={zonaSeleccionada}
+              className="w-full h-full border-0"
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${coordsActuales.bbox}&layer=mapnik&marker=${coordsActuales.lat},${coordsActuales.lon}`}
+              title="Mapa Dinámico La Paz"
+            ></iframe>
           </div>
+        </div>
 
-          <div className="flex-1 relative w-full h-full">
-            {loading ? (
-              <div className="flex items-center justify-center h-full text-[#757881] text-sm">
-                Cargando mapa de incidentes...
-              </div>
-            ) : (
-              <MapContainer
-                center={[-16.5000, -68.1200]}
-                zoom={13}
-                style={{ height: '100%', width: '100%' }}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; OpenStreetMap'
-                />
-                {reportes.map((item) => (
-                  <Marker
-                    key={item.id}
-                    position={[parseFloat(item.latitud || -16.5000), parseFloat(item.longitud || -68.1200)]}
-                  >
-                    <Popup>
-                      <div className="p-1 font-sans text-slate-900">
-                        <h3 className="font-bold text-xs border-b pb-1 mb-1">{item.titulo}</h3>
-                        <p className="text-[11px] text-slate-600 mb-2">{item.descripcion}</p>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                          item.estado === 'verificado' ? 'bg-[#10B981]/20 text-[#047857]' : 'bg-[#F59E0B]/20 text-[#B45309]'
-                        }`}>
-                          {item.estado}
-                        </span>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-              </MapContainer>
-            )}
-          </div>
-        </section>
-
-        {/* PANEL LATERAL DE ALERTAS (ESTILO TARJETAS SKOPE) */}
-        <section className="lg:col-span-4 bg-[#0F172A] rounded-2xl border border-[#1E293B] p-4 flex flex-col h-[78vh] shadow-xl">
-          <div className="flex justify-between items-center mb-3 pb-2 border-b border-[#1E293B]">
-            <h2 className="text-sm font-bold text-white tracking-wide">Feed de Alertas</h2>
-            <span className="text-[10px] bg-[#1E293B] text-[#2563EB] font-bold px-2.5 py-0.5 rounded-full border border-blue-500/20">
-              {reportes.length} Activas
-            </span>
-          </div>
+        {/* LISTADO LATERAL */}
+        <div className="bg-slate-900 rounded-xl p-4 border border-slate-800 flex flex-col h-[560px]">
+          <h3 className="text-md font-semibold text-slate-300 mb-3">
+            🔔 Incidentes Filtrados ({reportesFiltrados.length})
+          </h3>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {reportes.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-xs text-[#757881]">No hay reportes recibidos desde la App.</p>
-              </div>
+            {reportesFiltrados.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">
+                No hay incidentes registrados para este macrodistrito.
+              </p>
             ) : (
-              reportes.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="bg-[#1E293B]/60 rounded-xl p-3.5 border border-slate-800 hover:border-[#2563EB]/50 transition shadow-sm"
-                >
-                  <div className="flex justify-between items-start mb-1.5">
-                    <h3 className="font-semibold text-xs text-white">{item.titulo}</h3>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                      item.estado === 'verificado' 
-                        ? 'bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30' 
-                        : 'bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30'
-                    }`}>
-                      {item.estado}
+              reportesFiltrados.map((item) => (
+                <div key={item.id} className="p-3 bg-slate-800/60 rounded-lg border border-slate-700/60">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      {item.estado || 'verificado'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                      📍 {obtenerMacrodistrito(item)}
                     </span>
                   </div>
-
-                  <p className="text-[11px] text-[#757881] mb-3 line-clamp-2 leading-relaxed">
-                    {item.descripcion}
-                  </p>
-
-                  {/* BOTONES CON BOTÓN PRIMARIO #2563EB Y SECUNDARIO #10B981 */}
-                  <div className="flex gap-2 border-t border-slate-800/80 pt-2.5">
-                    <button
-                      onClick={() => cambiarEstado(item.id, 'verificado')}
-                      className="flex-1 bg-[#2563EB] hover:bg-blue-600 active:scale-95 text-white text-[10px] font-semibold py-1.5 rounded-lg transition shadow-md shadow-blue-500/10"
-                    >
-                      Aprobar (#2563EB)
-                    </button>
-                    <button
-                      onClick={() => cambiarEstado(item.id, 'atendido')}
-                      className="flex-1 bg-[#10B981]/20 hover:bg-[#10B981]/30 active:scale-95 text-[#10B981] text-[10px] font-semibold py-1.5 rounded-lg transition border border-[#10B981]/30"
-                    >
-                      Resolver (#10B981)
-                    </button>
-                  </div>
+                  <h4 className="font-semibold text-slate-200 mt-1 text-sm">{item.titulo}</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">{item.descripcion}</p>
                 </div>
               ))
             )}
           </div>
-        </section>
+        </div>
 
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
